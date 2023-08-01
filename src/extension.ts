@@ -22,11 +22,10 @@ export function activate(context: vscode.ExtensionContext) {
 						if (!(typeof tab.input === 'object' && tab.input !== null && 'uri' in tab.input)) {
 							return [];
 						}
-						const icon: string = tab.isPinned ? '$(pinned) ' : '';
 						// @ts-ignore
 						const relativePath: string = vscode.workspace.asRelativePath(tab.input.uri.path);
 						return {
-							label: `${icon}${path.basename(relativePath)}`,
+							label: `${path.basename(relativePath)}`,
 							description: path.dirname(relativePath),
 							_type: 'file',
 							tab: tab,
@@ -44,20 +43,53 @@ export function activate(context: vscode.ExtensionContext) {
 			// 	},
 			// 	new Map(),
 			// );
-			var sortedItems: MyItem[] = tabItems.filter(item => item.tab?.isPinned);
-			sortedItems.push(...vscode.window.terminals.map(
-				terminal => {
-					const result: MyItem = {
-						label: `$(terminal) ${terminal.name}`,
-						_type: 'terminal',
-						terminal: terminal,
-					};
-					return result;
+			var sortedItems: MyItem[] = [
+				...tabItems,
+				...vscode.window.terminals.map(
+					terminal => {
+						return {
+							label: terminal.name,
+							_type: 'terminal',
+							terminal: terminal,
+						} as MyItem;
+					}
+				)
+			];
+
+			function sortItemsByName(a: MyItem, b: MyItem): number {
+				if (!!a.tab?.isPinned !== !!b.tab?.isPinned) {
+					return !!a.tab?.isPinned ? -1 : 1;
 				}
-			));
-			sortedItems.push(...tabItems.filter(item => !item.tab?.isPinned));
-			sortedItems = sortedItems.map((item, index) => {
-				return {...item, label: `${index + 1}: ${item.label}`};
+				if (!!a.terminal !== !!b.terminal) {
+					return !!a.terminal ? -1 : 1;
+				}
+				return a.label.toLowerCase() > b.label.toLowerCase() ? 1 : -1;
+			}
+			sortedItems.sort(sortItemsByName);
+			const showAnyIcon: boolean = sortedItems.some(
+				item => (
+					(item._type === 'file' && (item.tab?.isPinned || item.tab?.isDirty))
+					|| item._type === 'terminal'
+				)
+			);
+			sortedItems = sortedItems.map(item => {
+				var icon: string = showAnyIcon ? '    \u{2009}' : '';
+				if (item._type === 'file') {
+					if (item.tab?.isPinned && item.tab?.isDirty) {
+						icon = '$(pinned-dirty)';
+					} else if (item.tab?.isPinned) {
+						icon = '$(pinned)';
+					} else if (item.tab?.isDirty) {
+						icon = '$(close-dirty)';
+					}
+				} else if (item._type === 'terminal') {
+					icon = '$(terminal)';
+				}
+				if (icon !== '') {
+					icon = `${icon} `;
+				}
+
+				return { ...item, label: `${icon}${item.label}` };
 			});
 			const choice: undefined | MyItem = await vscode.window.showQuickPick<MyItem>(
 				sortedItems,
@@ -84,4 +116,4 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
